@@ -1,9 +1,16 @@
 from typing import Union
-
-import uvicorn 
-
+import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from the .env file
+load_dotenv()
+
+# Get values from environment variables
+HOST = os.getenv("HOST", "127.0.0.1")
+PORT = int(os.getenv("PORT", 3003))
 
 app = FastAPI()
 
