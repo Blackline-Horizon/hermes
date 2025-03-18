@@ -1,7 +1,7 @@
 from typing import Union, List
 import uvicorn
-from fastapi import FastAPI, HTTPException
-from sqlalchemy import create_engine, select, schema, Table, MetaData
+from fastapi import FastAPI, HTTPException, Response
+from sqlalchemy import create_engine, select, delete, schema
 from sqlalchemy.orm import sessionmaker
 from fastapi.responses import PlainTextResponse, StreamingResponse
 from dotenv import load_dotenv
@@ -10,10 +10,11 @@ import httpx
 import os
 
 from io import BytesIO
-from reportlab.pdfgen import canvas
 
 from schemas import ReportResponse, ReportCreate
 from models import Base, Report, PDFFile
+from generatepdf import generate_pdf
+
 
 # Load environment variables from the .env file
 load_dotenv()
@@ -58,35 +59,23 @@ def startup_event():
         if not engine.dialect.has_schema(conn, "report"):
             try:
                 conn.execute(schema.CreateSchema("report"))
+                # conn.execute(schema.DropSchema("report", cascade=True))
                 conn.commit()
             except Exception as e:
+                print("ERROR HAPPENED -----------------------------------")
                 print(e)
     # Create tables within the 'report' schema
     Base.metadata.create_all(bind=engine)
-
 
 @app.get("/", response_class=PlainTextResponse)
 def read_root():
     return "Reporting from Hermes Service!"
 
-
-def generate_pdf(title: str, content: str) -> bytes:
-    """Generates a simple PDF and returns it as binary data."""
-    buffer = BytesIO()
-    p = canvas.Canvas(buffer)
-    p.drawString(100, 750, f"Title: {title}")
-    p.drawString(100, 730, f"Content: {content}")
-    p.showPage()
-    p.save()
-    buffer.seek(0)
-    return buffer.read()
-
 @app.post("/report", response_model=ReportResponse)
 def create_report(report_data: ReportCreate):
-    # return { 'id':2,'title': "Testing File 2",'created_at': "2002-10-22",'industry': "Oil & Gas",'pdf_id': 2}
     db = SessionLocal()
-    pdf_data = generate_pdf(report_data.title, report_data.industry)
-
+    pdf_data = generate_pdf(report_data)
+    
     # Store PDF first
     new_pdf = PDFFile(pdf_data=pdf_data)
     db.add(new_pdf)
@@ -95,26 +84,36 @@ def create_report(report_data: ReportCreate):
 
     new_report = Report(
         title=report_data.title,
-        created_at = report_data.created_at,
+        date_start = report_data.date_start,
+        date_end = report_data.date_end,
         industry=report_data.industry,
-        location=report_data.location, 
+        continents=report_data.continents,
+        devices=report_data.devices,
+        resolutions=report_data.resolutions,
         alerts=report_data.alerts,
         pdf_id=new_pdf.id,
         username=report_data.username 
     )
+
     db.add(new_report)
     db.commit()
     db.refresh(new_report)
 
     return new_report  
 
+@app.delete("/report")
+def deleteReport(report_id: int):
+    db = SessionLocal()
+    statement = delete(Report).where(Report.id == report_id)
+    print(db.execute(statement=statement))
+    db.commit()
+    return Response()
+
 @app.get("/reports", response_model=List[ReportResponse])
 def list_reports(username:str):
     db = SessionLocal()
     statement = select(Report).filter_by(username=username)
     reports = db.execute(statement=statement).scalars().all()
-    # reports = [{ 'id':1,'title': "Testing File 1",'created_at': "2002-10-22",'industry': "Transportation",'pdf_id': 1},
-    #            { 'id':2,'title': "Testing File 2",'created_at': "2002-10-22",'industry': "Oil & Gas",'pdf_id': 2}]
     return reports if reports else [] 
 
 @app.get("/pdf_report")

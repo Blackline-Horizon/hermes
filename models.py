@@ -1,4 +1,3 @@
-
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, MetaData, LargeBinary
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
@@ -15,9 +14,12 @@ class Report(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, index=True)
     title = Column(String, nullable=False)
-    created_at = Column(DateTime, nullable = False)
-    industry = Column(String, nullable = False)
-    location = Column(String, nullable = False)
+    date_start = Column(DateTime, nullable = False)
+    date_end = Column(DateTime, nullable = False)
+    industry = Column(ARRAY(String), nullable = False)
+    continents = Column(ARRAY(String), nullable = False)
+    devices = Column(ARRAY(String), nullable = False)
+    resolutions = Column(ARRAY(String), nullable = False)
     alerts = Column(ARRAY(String), nullable = False)
     pdf_id = Column(Integer, ForeignKey("pdf_files.id"), unique=True)
 
