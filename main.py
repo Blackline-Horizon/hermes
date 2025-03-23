@@ -83,7 +83,7 @@ def create_report(report_data: ReportCreate):
     db.refresh(new_pdf)
 
     new_report = Report(
-        title=report_data.title,
+        title=report_data.title.title(),
         date_start = report_data.date_start,
         date_end = report_data.date_end,
         industry=report_data.industry,

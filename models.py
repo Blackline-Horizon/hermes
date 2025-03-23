@@ -23,7 +23,7 @@ class Report(Base):
     alerts = Column(ARRAY(String), nullable = False)
     pdf_id = Column(Integer, ForeignKey("pdf_files.id"), unique=True)
 
-    pdf = relationship("PDFFile", back_populates="report")
+    pdf = relationship("PDFFile", back_populates="report", cascade="all, delete-orphan", single_parent=True)
 
 class PDFFile(Base):
     __tablename__ = "pdf_files"
