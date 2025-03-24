@@ -6,7 +6,7 @@ from collections import defaultdict
 
 import matplotlib
 matplotlib.use("AGG")
-import matplotlib.pyplot as plt  # Not used for charts now, but retained if needed
+import matplotlib.pyplot as plt  # Retained if needed
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -20,7 +20,7 @@ import plotly.io as pio
 
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import (BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, Table,
-                                TableStyle, Image, PageBreak, NextPageTemplate, HRFlowable)
+                                TableStyle, Image, PageBreak, NextPageTemplate, HRFlowable, Flowable)
 from reportlab.platypus.tableofcontents import TableOfContents
 from reportlab.lib.units import inch
 from reportlab.lib import colors
@@ -45,23 +45,109 @@ for name, filename in fonts.items():
     else:
         print(f"Font file not found: {path}")
 
-# === Custom Styles ===
+# === Custom Styles (Red & White Theme) ===
 custom_styles = {
-    "Title": ParagraphStyle("Title", fontName="Roboto-Bold", fontSize=26, textColor=colors.white,
+    "Title": ParagraphStyle("Title", fontName="Roboto-Bold", fontSize=28, textColor=colors.HexColor("#a6192e"),
                             alignment=TA_CENTER, spaceAfter=20),
-    "Heading1": ParagraphStyle("Heading1", fontName="Roboto-Bold", fontSize=18,
-                               textColor=colors.HexColor("#a6192e"), spaceAfter=12),
-    "Heading2": ParagraphStyle("Heading2", fontName="Roboto-Medium", fontSize=14,
-                               textColor=colors.white, spaceAfter=8),
-    "Normal": ParagraphStyle("Normal", fontName="Roboto-Light", fontSize=10.5,
-                             textColor=colors.white, leading=14),
+    "Heading1": ParagraphStyle("Heading1", fontName="Roboto-Bold", fontSize=24,
+                               textColor=colors.HexColor("#a6192e"), spaceAfter=24),  # increased spaceAfter
+    "Heading2": ParagraphStyle("Heading2", fontName="Roboto-Medium", fontSize=18,
+                               textColor=colors.HexColor("#a6192e"), spaceAfter=16),  # increased spaceAfter
+    "Normal": ParagraphStyle("Normal", fontName="Roboto-Light", fontSize=12,
+                             textColor=colors.black, leading=16),
     "AI": ParagraphStyle("AI", fontName="Roboto-Light", fontSize=10,
-                         textColor=colors.HexColor("#CCCCCC"),
-                         backColor=colors.HexColor("#1e1e1e"), spaceBefore=6, spaceAfter=6,
+                         textColor=colors.black,
+                         backColor=colors.HexColor("#f0f0f0"), spaceBefore=6, spaceAfter=6,
                          leftIndent=6, rightIndent=6),
     "TOC": ParagraphStyle("TOC", fontName="Roboto-Regular", fontSize=11,
                           textColor=colors.HexColor("#a6192e"), spaceAfter=4),
 }
+
+# === Chart Generation Functions using Plotly (Red & White Theme) ===
+def create_bar_chart(data, labels, title, x_label, y_label):
+    n = len(data)
+    # Generate a red-based palette using Plotly's Reds scale
+    palette = []
+    if n == 1:
+        palette = ["#a6192e"]
+    else:
+        for i in range(n):
+            col = px.colors.sample_colorscale("Reds", i/(n-1))[0]
+            palette.append(col)
+    fig = go.Figure(data=[go.Bar(x=labels, y=data, marker_color=palette)])
+    fig.update_layout(
+        title=title,
+        xaxis_title=x_label,
+        yaxis_title=y_label,
+        template="plotly_white",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(color="black"),
+    )
+    img_bytes = pio.to_image(fig, format="png", scale=2)
+    return io.BytesIO(img_bytes)
+
+def create_multi_line_chart(x_values, y_series, title, x_label, y_label):
+    fig = go.Figure()
+    for label, y_values in y_series.items():
+        fig.add_trace(go.Scatter(x=x_values, y=y_values, mode="lines+markers", name=label,
+                                 line=dict(width=2)))
+    fig.update_layout(
+        title=title,
+        xaxis_title=x_label,
+        yaxis_title=y_label,
+        template="plotly_white",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(color="black"),
+    )
+    img_bytes = pio.to_image(fig, format="png", scale=2)
+    return io.BytesIO(img_bytes)
+
+def create_line_chart(data_points):
+    x_values, y_values = zip(*data_points)
+    fig = go.Figure(data=go.Scatter(x=x_values, y=y_values, mode="lines+markers", line=dict(width=2)))
+    fig.update_layout(
+        title="Line Chart",
+        xaxis_title="X-Axis (Time)",
+        yaxis_title="Y-Axis (Values)",
+        template="plotly_white",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=dict(color="black"),
+    )
+    img_bytes = pio.to_image(fig, format="png", scale=2)
+    return io.BytesIO(img_bytes)
+
+# === Custom Flowable for Charts with Adjusted Dimensions ===
+class ChartImage(Image):
+    def __init__(self, chart_func, width=400, height=300, *chart_args, **chart_kwargs):
+        img_buffer = chart_func(*chart_args, **chart_kwargs)
+        img_buffer.seek(0)
+        super().__init__(img_buffer, width=width, height=height)
+
+# === Section Cover Flowable for Separating Sections ===
+class SectionCover(Flowable):
+    def __init__(self, title):
+        super().__init__()
+        self.title = title
+
+    def wrap(self, availWidth, availHeight):
+        return availWidth, availHeight
+
+    def draw(self):
+        canvas = self.canv
+        width, height = canvas._pagesize
+        # White background
+        canvas.setFillColor(colors.white)
+        canvas.rect(0, 0, width, height, fill=1)
+        # Red header rectangle at the top
+        canvas.setFillColor(colors.HexColor("#a6192e"))
+        canvas.rect(0, height - 50, width, 50, fill=1)
+        # Draw the section title centered with a slight upward offset
+        canvas.setFillColor(colors.HexColor("#a6192e"))
+        canvas.setFont("Roboto-Bold", 36)
+        canvas.drawCentredString(width/2, height/2 + 50, self.title)
 
 # === Data Formatting Functions ===
 def formatAthenaData(report_data):
@@ -127,61 +213,33 @@ def getOracleData(report_data) -> dict:
             response_dict = {}
     return response_dict
 
-# === Chart Generation Functions using Plotly for Modern, Sleek Charts ===
-def create_bar_chart(data, labels, title, x_label, y_label):
-    n = len(data)
-    # Generate a red-based palette using Plotly's Reds scale
-    palette = []
-    if n == 1:
-        palette = ["#a6192e"]
-    else:
-        for i in range(n):
-            col = px.colors.sample_colorscale("Reds", i/(n-1))[0]
-            palette.append(col)
-    fig = go.Figure(data=[go.Bar(x=labels, y=data, marker_color=palette)])
-    fig.update_layout(
-        title=title,
-        xaxis_title=x_label,
-        yaxis_title=y_label,
-        template="plotly_dark",
-        paper_bgcolor="#171717",
-        plot_bgcolor="#171717",
-        font=dict(color="white"),
-    )
-    img_bytes = pio.to_image(fig, format="png", scale=2)
-    return io.BytesIO(img_bytes)
+# === PDF Page Layout Functions ===
+def add_background(canvas, doc):
+    width, height = doc.pagesize
+    canvas.setFillColor(colors.white)
+    canvas.rect(0, 0, width, height, fill=1)
+    canvas.setFillColor(colors.HexColor("#a6192e"))
+    canvas.rect(0, height - 50, width, 50, fill=1)
+    canvas.setFont("Roboto-Light", 9)
+    canvas.setFillColor(colors.black)
+    canvas.drawCentredString(width / 2, 15, f"Page {doc.page}")
 
-def create_multi_line_chart(x_values, y_series, title, x_label, y_label):
-    fig = go.Figure()
-    for label, y_values in y_series.items():
-        fig.add_trace(go.Scatter(x=x_values, y=y_values, mode="lines+markers", name=label,
-                                 line=dict(width=2)))
-    fig.update_layout(
-        title=title,
-        xaxis_title=x_label,
-        yaxis_title=y_label,
-        template="plotly_dark",
-        paper_bgcolor="#171717",
-        plot_bgcolor="#171717",
-        font=dict(color="white"),
-    )
-    img_bytes = pio.to_image(fig, format="png", scale=2)
-    return io.BytesIO(img_bytes)
-
-def create_line_chart(data_points):
-    x_values, y_values = zip(*data_points)
-    fig = go.Figure(data=go.Scatter(x=x_values, y=y_values, mode="lines+markers", line=dict(width=2)))
-    fig.update_layout(
-        title="Line Chart",
-        xaxis_title="X-Axis (Time)",
-        yaxis_title="Y-Axis (Values)",
-        template="plotly_dark",
-        paper_bgcolor="#171717",
-        plot_bgcolor="#171717",
-        font=dict(color="white"),
-    )
-    img_bytes = pio.to_image(fig, format="png", scale=2)
-    return io.BytesIO(img_bytes)
+def draw_cover(canvas, doc, report_data):
+    width, height = doc.pagesize
+    # White background cover page with red header
+    canvas.setFillColor(colors.white)
+    canvas.rect(0, 0, width, height, fill=1)
+    canvas.setFillColor(colors.HexColor("#a6192e"))
+    canvas.rect(0, height - 50, width, 50, fill=1)
+    logo_path = "./assets/blackline-horizon.png"
+    canvas.drawImage(logo_path, width/2 - 150, height - 250, width=300, height=80, mask='auto')
+    # Removed "Blackline Horizon" text since the logo suffices
+    canvas.setFont("Roboto-Light", 18)
+    canvas.setFillColor(colors.black)
+    canvas.drawCentredString(width/2, height - 320, "Automated Alert Analytics Report")
+    canvas.setFont("Roboto-Light", 12)
+    generated_on = datetime.now().strftime("%B %d, %Y")
+    canvas.drawCentredString(width/2, height - 350, f"Generated: {generated_on}")
 
 # === Data Aggregation & Preparation Functions ===
 def prepare_multiline_grouped_data(grouped_data_by_date):
@@ -219,47 +277,11 @@ def aggregate_grouped_values(grouped_data_by_date):
             aggregated[key] += value
     return dict(aggregated)
 
-# === Custom Flowable for Charts ===
-class ChartImage(Image):
-    def __init__(self, chart_func, width=400, height=250, *chart_args, **chart_kwargs):
-        img_buffer = chart_func(*chart_args, **chart_kwargs)
-        img_buffer.seek(0)
-        super().__init__(img_buffer, width=width, height=height)
-
-# === PDF Page Layout Functions ===
-def add_background(canvas, doc):
-    width, height = doc.pagesize
-    canvas.setFillColor(colors.HexColor("#171717"))
-    canvas.rect(0, 0, width, height, fill=1)
-    canvas.setFillColor(colors.HexColor("#a6192e"))
-    canvas.rect(0, height - 5, width, 5, fill=1)
-    canvas.setFont("Roboto-Light", 9)
-    canvas.setFillColor(colors.white)
-    canvas.drawCentredString(width / 2, 15, f"Page {doc.page}")
-
-def draw_cover(canvas, doc, report_data):
-    width, height = doc.pagesize
-    canvas.setFillColor(colors.black)
-    canvas.rect(0, 0, width, height, fill=1)
-    canvas.setFillColor(colors.HexColor("#a6192e"))
-    canvas.rect(0, height - 5, width, 5, fill=1)
-    logo_path = "./assets/blackline-horizon.png"
-    # Increase logo width by 1.5x (300 vs. 200)
-    canvas.drawImage(logo_path, width/2 - 150, height - 250, width=300, height=80, mask='auto')
-    canvas.setFont("Roboto-Bold", 32)
-    canvas.setFillColor(colors.white)
-    canvas.drawCentredString(width/2, height - 320, "Blackline Horizon")
-    canvas.setFont("Roboto-Light", 18)
-    canvas.drawCentredString(width/2, height - 355, "Automated Alert Analytics Report")
-    canvas.setFont("Roboto-Light", 12)
-    generated_on = datetime.now().strftime("%B %d, %Y")
-    canvas.drawCentredString(width/2, height - 385, f"Generated: {generated_on}")
-
 # === Main PDF Generation Function ===
 def generate_pdf(report_data):
     buffer = io.BytesIO()
     doc = BaseDocTemplate(buffer, pagesize=letter, title=report_data.title)
-    
+
     # Define frames and page templates:
     cover_frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="cover")
     cover_template = PageTemplate(id="Cover", frames=cover_frame,
@@ -270,223 +292,223 @@ def generate_pdf(report_data):
     
     doc.addPageTemplates([cover_template, body_template])
     
+    # --- TOC Setup ---
+    toc = TableOfContents()
+    toc.levelStyles = [custom_styles["TOC"]]
+    
     elements = []
     # Start with cover page then switch to Body template:
     elements.append(NextPageTemplate("Body"))
     elements.append(PageBreak())
     
     # Table of Contents
-    toc = TableOfContents()
-    toc.levelStyles = [custom_styles["TOC"]]
     elements.append(Paragraph("Table of Contents", custom_styles["Heading1"]))
     elements.append(toc)
     elements.append(PageBreak())
     
-    # Fetch Data
+    # --- Add Section Cover for Analytics (centered) ---
+    elements.append(SectionCover("Analytics Section"))
+    elements.append(PageBreak())
+    
+    # --- Introduction Section with Increased Spacing ---
+    elements.append(Paragraph("Introduction", custom_styles["Heading1"]))
+    elements.append(Spacer(1, 24))
+    elements.append(Paragraph(
+        "This report provides an in-depth analysis of alert data collected over the past year. "
+        "It examines system performance, identifies trends, and highlights areas for improvement. "
+        "The following sections break down the data from various angles and provide insights to guide future actions.",
+        custom_styles["Normal"]
+    ))
+    elements.append(Spacer(1, 24))
+    
+    # --- Alert Count Over Time ---
+    # Fetch Athena and Oracle data first:
     athena_data = getAthenaData(report_data)
     oracle_data = getOracleData(report_data)
     oracle_blank = not bool(oracle_data)
     
-    # --- Core Analytics Section ---
-    elements.append(Paragraph("Introduction", custom_styles["Heading1"]))
-    intro_text = (
-        "This report provides an in-depth analysis of alert data collected over the past year. "
-        "It examines system performance, identifies trends, and highlights areas for improvement. "
-        "The following analytics sections offer a detailed look at various aspects of the data."
-    )
-    elements.append(Paragraph(intro_text, custom_styles["Normal"]))
-    elements.append(Spacer(1, 12))
+    dates = athena_data.get("time_series_overall", {}).get("date_created", [])
+    alert_counts = athena_data.get("time_series_overall", {}).get("alert_count", [])
     
     elements.append(Paragraph("Alert Count Over Time", custom_styles["Heading2"]))
+    elements.append(Spacer(1, 12))
     elements.append(Paragraph(
-        "The line graph below depicts the overall trend of alerts over the entire date range. "
-        "It helps identify periods of high activity which may correlate with system events or external factors.",
+        "The line graph below highlights fluctuations in alert volume over time, helping to quickly identify periods of high activity that may warrant further investigation.",
         custom_styles["Normal"]
     ))
-    dates = athena_data["time_series_overall"]["date_created"]
-    alert_counts = athena_data["time_series_overall"]["alert_count"]
-    elements.append(ChartImage(create_multi_line_chart, 500, 350, dates, {"Alert Count": alert_counts},
+    elements.append(ChartImage(create_multi_line_chart, 400, 250, dates, {"Alert Count": alert_counts},
                                  "Alert Count Over Time", "Date", "Alerts"))
-    elements.append(Paragraph(
-        "This modern chart uses a clean dark theme with red accents to emphasize spikes and troughs in alert activity. "
-        "Such insights are crucial for timely operational adjustments.",
-        custom_styles["Normal"]
-    ))
     elements.append(Spacer(1, 12))
     elements.append(PageBreak())
     
-    # --- Divider before AI Section ---
-    if not oracle_blank:
-        elements.append(HRFlowable(width="100%", thickness=1, lineCap='round',
-                                   color=colors.HexColor("#a6192e"), spaceBefore=12, spaceAfter=12))
-        elements.append(Paragraph("The following section contains AI-generated forecasts and insights, "
-                                  "providing predictive analysis beyond the core analytics.", custom_styles["Normal"]))
-        elements.append(PageBreak())
+    # --- Resolutions Analysis Section ---
+    elements.append(Paragraph("Resolutions Analysis", custom_styles["Heading1"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(
+        "This section breaks down the types of resolutions applied to alerts. The charts below display aggregate counts and trends over time, helping assess the effectiveness of various resolution strategies.",
+        custom_styles["Normal"]
+    ))
+    resolutions = athena_data['grouped_data']['resolution_reason']
+    resolutions_grouped = aggregate_grouped_values(resolutions)
+    elements.append(ChartImage(create_bar_chart, 400, 400, list(resolutions_grouped.values()), list(resolutions_grouped.keys()),
+                                 "Resolution Analysis", "Resolution Type", "Alerts"))
+    elements.append(Spacer(1, 12))
+    x_vals, y_series = prepare_multiline_grouped_data(resolutions)
+    elements.append(ChartImage(create_multi_line_chart, 400, 400, x_vals, y_series,
+                                 "Resolution Trends Over Time", "Date", "Alerts"))
+    elements.append(Spacer(1, 12))
+    elements.append(PageBreak())
     
-    # --- AI Generated Forecast Section (if available) ---
+    # --- Device Analysis Section ---
+    elements.append(Paragraph("Device Analysis", custom_styles["Heading1"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(
+        "This section examines alert distributions across different device types, helping identify areas where targeted maintenance or optimization may be needed.",
+        custom_styles["Normal"]
+    ))
+    devices = athena_data['grouped_data']['device_type']
+    devices_grouped = aggregate_grouped_values(devices)
+    elements.append(ChartImage(create_bar_chart, 400, 350, list(devices_grouped.values()), list(devices_grouped.keys()),
+                                 "Device Analysis", "Device Type", "Alerts"))
+    elements.append(Spacer(1, 12))
+    x_vals, y_series = prepare_multiline_grouped_data(devices)
+    elements.append(ChartImage(create_multi_line_chart, 400, 400, x_vals, y_series,
+                                 "Device Trends Over Time", "Date", "Alerts"))
+    elements.append(Spacer(1, 12))
+    elements.append(PageBreak())
+    
+    # --- Sensor Analysis Section ---
+    elements.append(Paragraph("Sensor Analysis", custom_styles["Heading1"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(
+        "Sensor data is critical for understanding alert generation. The charts below display sensor-specific alert counts and their trends over time.",
+        custom_styles["Normal"]
+    ))
+    sensors = athena_data['grouped_data']['sensor_type']
+    sensors_grouped = aggregate_grouped_values(sensors)
+    elements.append(ChartImage(create_bar_chart, 400, 350, list(sensors_grouped.values()), list(sensors_grouped.keys()),
+                                 "Sensor Analysis", "Sensor Type", "Alerts"))
+    elements.append(Spacer(1, 12))
+    x_vals, y_series = prepare_multiline_grouped_data(sensors)
+    elements.append(ChartImage(create_multi_line_chart, 400, 350, x_vals, y_series,
+                                 "Sensor Trends Over Time", "Date", "Alerts"))
+    elements.append(Spacer(1, 12))
+    elements.append(PageBreak())
+    
+    # --- Industry Analysis Section ---
+    elements.append(Paragraph("Industry Analysis", custom_styles["Heading1"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(
+        "This section segments alert data by industry, revealing trends that may highlight market-specific challenges and opportunities.",
+        custom_styles["Normal"]
+    ))
+    industry = athena_data['grouped_data']['industry']
+    industry_grouped = aggregate_grouped_values(industry)
+    elements.append(ChartImage(create_bar_chart, 400, 450, list(industry_grouped.values()), list(industry_grouped.keys()),
+                                 "Industry Analysis", "Industry", "Alerts"))
+    elements.append(Spacer(1, 12))
+    x_vals, y_series = prepare_multiline_grouped_data(industry)
+    elements.append(ChartImage(create_multi_line_chart, 400, 350, x_vals, y_series,
+                                 "Industry Trends Over Time", "Date", "Alerts"))
+    elements.append(Spacer(1, 12))
+    elements.append(PageBreak())
+    
+    # --- Event Analysis Section ---
+    elements.append(Paragraph("Event Analysis", custom_styles["Heading1"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(
+        "Events can have a significant impact on alert patterns. This section breaks down alerts by event type and examines their trends over time.",
+        custom_styles["Normal"]
+    ))
+    event = athena_data['grouped_data']['event_type']
+    event_grouped = aggregate_grouped_values(event)
+    elements.append(ChartImage(create_bar_chart, 400, 400, list(event_grouped.values()), list(event_grouped.keys()),
+                                 "Event Analysis", "Event Type", "Alerts"))
+    elements.append(Spacer(1, 12))
+    x_vals, y_series = prepare_multiline_grouped_data(event)
+    elements.append(ChartImage(create_multi_line_chart, 400, 350, x_vals, y_series,
+                                 "Event Trends Over Time", "Date", "Alerts"))
+    elements.append(Spacer(1, 12))
+    elements.append(PageBreak())
+    
+    # --- Conclusion Section ---
+    elements.append(Paragraph("Conclusion", custom_styles["Heading1"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(
+        "In summary, the analysis above reveals key trends in alert data across multiple dimensions. "
+        "The detailed breakdown—from overall trends to device, sensor, industry, and event insights—provides a comprehensive view of system performance, enabling proactive adjustments and strategic planning.",
+        custom_styles["Normal"]
+    ))
+    elements.append(Spacer(1, 12))
+    
+    # --- AI Insights or Predictive Analytics Section ---
     if not oracle_blank:
+        # Existing AI Insights section:
+        elements.append(PageBreak())
+        elements.append(SectionCover("AI Insights"))
+        elements.append(PageBreak())
+        
         elements.append(Paragraph("Past Month & Next Month Analysis", custom_styles["Heading1"]))
+        elements.append(Spacer(1, 12))
         elements.append(Paragraph(
             "This section compares actual alert data from the past month with AI-generated forecasts. "
-            "The analysis helps to identify discrepancies and refine predictive models.",
+            "The analysis identifies discrepancies between observed data and predictions, refining future forecasts.",
             custom_styles["Normal"]
         ))
         elements.append(Spacer(1, 12))
         
-        # Past Month Bar Chart
         elements.append(Paragraph("Past Month Alert Comparison", custom_styles["Heading2"]))
+        elements.append(Spacer(1, 12))
         elements.append(Paragraph(
-            "The bar chart below contrasts the actual alert counts from the past 4 weeks with the AI predictions. "
-            "The visual representation aids in quickly identifying over- or under-prediction trends.",
+            "The bar chart below contrasts the actual alert counts from the past 4 weeks with AI predictions, helping evaluate forecasting accuracy.",
             custom_styles["Normal"]
         ))
         actual_last_4w = oracle_data['actual_last_4w']
         monthly_alerts = [actual_last_4w, oracle_data['predicted_last_4w']]
         monthly_alerts_labels = ['Actual Last 4 Weeks', 'Predicted Last 4 Weeks']
-        elements.append(ChartImage(create_bar_chart, 400, 300, monthly_alerts, monthly_alerts_labels,
+        elements.append(ChartImage(create_bar_chart, 350, 250, monthly_alerts, monthly_alerts_labels,
                                      "Past Month Alert Comparison", "Category", "Alert Count"))
+        elements.append(Spacer(1, 12))
+        
+        elements.append(Paragraph("Next Month Forecast", custom_styles["Heading2"]))
+        elements.append(Spacer(1, 12))
+        trend = "increase" if oracle_data['predicted_next_4w'] > actual_last_4w else "decrease"
         elements.append(Paragraph(
-            "The modern bar chart employs shades of red to differentiate between actual and predicted values, "
-            "providing a clear and sleek visual comparison.",
+            f"Based on the AI model, an {trend} in alert counts is forecasted for the next four weeks. This predictive insight enables early resource allocation to address potential challenges.",
             custom_styles["Normal"]
         ))
         elements.append(Spacer(1, 12))
-        
-        # Next Month Forecast
-        elements.append(Paragraph("Next Month Forecast", custom_styles["Heading2"]))
-        trend = "increase" if oracle_data['predicted_next_4w'] > actual_last_4w else "decrease"
-        elements.append(Paragraph(
-            f"The AI model projects an {trend} in alert counts for the next four weeks. "
-            "This forecast acts as an early warning system, enabling proactive resource allocation.",
-            custom_styles["Normal"]
-        ))
-        elements.append(Spacer(1, 6))
         forecast_table = Table([
             ["Expected Alerts"],
             [str(oracle_data['predicted_next_4w'])]
         ], style=[("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
                   ("ALIGN", (0,0), (-1,-1), "CENTER")])
         elements.append(forecast_table)
+        elements.append(Spacer(1, 12))
+        elements.append(PageBreak())
+    else:
+        # Add this new section
+        elements.append(PageBreak())
+        elements.append(Paragraph("Predictive Analytics", custom_styles["Heading1"]))
         elements.append(Paragraph(
-            "The forecast table succinctly summarizes the AI prediction, complementing the visual data presented above.",
+            "There is not enough historical data to generate reliable predictions at this time. "
+            "As more alert data is collected, predictive forecasting will become available in future reports.", 
             custom_styles["Normal"]
         ))
+        elements.append(Spacer(1, 12))
         elements.append(PageBreak())
     
-    # --- Resolutions Analysis Section ---
-    elements.append(Paragraph("Resolutions Analysis", custom_styles["Heading1"]))
-    resolutions = athena_data['grouped_data']['resolution_reason']
-    resolutions_grouped = aggregate_grouped_values(resolutions)
-    elements.append(ChartImage(create_bar_chart, 500, 500, list(resolutions_grouped.values()), list(resolutions_grouped.keys()),
-                                 "Resolution Analysis", "Resolution Type", "Alerts"))
-    elements.append(Paragraph(
-        "This bar chart highlights the distribution of resolution types. The use of a modern dark theme with red accents "
-        "makes it easy to distinguish among the different categories.",
-        custom_styles["Normal"]
-    ))
-    elements.append(Spacer(1, 12))
-    elements.append(PageBreak())
-    x_vals, y_series = prepare_multiline_grouped_data(resolutions)
-    elements.append(ChartImage(create_multi_line_chart, 500, 500, x_vals, y_series,
-                                 "Resolution Trends Over Time", "Date", "Alerts"))
-    elements.append(Paragraph(
-        "The multi-line chart illustrates how resolution trends evolve over time, offering insights into system responsiveness.",
-        custom_styles["Normal"]
-    ))
-    elements.append(PageBreak())
+    # --- Add TOC Callback ---
+    def after_flowable(flowable):
+        if hasattr(flowable, "style") and flowable.style.name in ["Heading1", "Heading2"]:
+            level = 0 if flowable.style.name == "Heading1" else 1
+            text = flowable.getPlainText()
+            # Notify the TOC about this entry
+            doc.notify('TOCEntry', (level, text, doc.page))
     
-    # --- Device Analysis Section ---
-    elements.append(Paragraph("Device Analysis", custom_styles["Heading1"]))
-    devices = athena_data['grouped_data']['device_type']
-    devices_grouped = aggregate_grouped_values(devices)
-    elements.append(ChartImage(create_bar_chart, 500, 400, list(devices_grouped.values()), list(devices_grouped.keys()),
-                                 "Device Analysis", "Device Type", "Alerts"))
-    elements.append(Paragraph(
-        "This chart presents alert distributions across various device types, using sleek modern styling for clear comparison.",
-        custom_styles["Normal"]
-    ))
-    elements.append(Spacer(1, 12))
-    x_vals, y_series = prepare_multiline_grouped_data(devices)
-    elements.append(ChartImage(create_multi_line_chart, 500, 500, x_vals, y_series,
-                                 "Device Trends Over Time", "Date", "Alerts"))
-    elements.append(Paragraph(
-        "The line chart further highlights how device-related alerts vary over the selected period.",
-        custom_styles["Normal"]
-    ))
-    elements.append(PageBreak())
-    
-    # --- Sensor Analysis Section ---
-    elements.append(Paragraph("Sensor Analysis", custom_styles["Heading1"]))
-    sensors = athena_data['grouped_data']['sensor_type']
-    sensors_grouped = aggregate_grouped_values(sensors)
-    elements.append(ChartImage(create_bar_chart, 500, 450, list(sensors_grouped.values()), list(sensors_grouped.keys()),
-                                 "Sensor Analysis", "Sensor Type", "Alerts"))
-    elements.append(Paragraph(
-        "This chart displays sensor-specific alert counts in a modern format, using shades of red to emphasize differences.",
-        custom_styles["Normal"]
-    ))
-    elements.append(Spacer(1, 12))
-    x_vals, y_series = prepare_multiline_grouped_data(sensors)
-    elements.append(ChartImage(create_multi_line_chart, 500, 450, x_vals, y_series,
-                                 "Sensor Trends Over Time", "Date", "Alerts"))
-    elements.append(Paragraph(
-        "The multi-line graph showcases sensor trends over time, adding further context to the data.",
-        custom_styles["Normal"]
-    ))
-    elements.append(PageBreak())
-    
-    # --- Industry Analysis Section ---
-    elements.append(Paragraph("Industry Analysis", custom_styles["Heading1"]))
-    industry = athena_data['grouped_data']['industry']
-    industry_grouped = aggregate_grouped_values(industry)
-    elements.append(ChartImage(create_bar_chart, 500, 575, list(industry_grouped.values()), list(industry_grouped.keys()),
-                                 "Industry Analysis", "Industry", "Alerts"))
-    elements.append(Paragraph(
-        "This chart segments alert data by industry, employing a modern aesthetic for enhanced clarity.",
-        custom_styles["Normal"]
-    ))
-    x_vals, y_series = prepare_multiline_grouped_data(industry)
-    elements.append(ChartImage(create_multi_line_chart, 500, 450, x_vals, y_series,
-                                 "Industry Trends Over Time", "Date", "Alerts"))
-    elements.append(Paragraph(
-        "The line graph indicates industry-specific trends, providing valuable insight for targeted improvements.",
-        custom_styles["Normal"]
-    ))
-    elements.append(PageBreak())
-    
-    # --- Event Analysis Section ---
-    elements.append(Paragraph("Event Analysis", custom_styles["Heading1"]))
-    event = athena_data['grouped_data']['event_type']
-    event_grouped = aggregate_grouped_values(event)
-    elements.append(ChartImage(create_bar_chart, 500, 500, list(event_grouped.values()), list(event_grouped.keys()),
-                                 "Event Analysis", "Event Type", "Alerts"))
-    elements.append(Paragraph(
-        "This bar chart offers an overview of alert events, presented in a modern and sleek format.",
-        custom_styles["Normal"]
-    ))
-    elements.append(Spacer(1, 12))
-    x_vals, y_series = prepare_multiline_grouped_data(event)
-    elements.append(ChartImage(create_multi_line_chart, 500, 450, x_vals, y_series,
-                                 "Event Trends Over Time", "Date", "Alerts"))
-    elements.append(Paragraph(
-        "The multi-line chart shows how event alerts change over time, supporting deeper analysis.",
-        custom_styles["Normal"]
-    ))
-    elements.append(PageBreak())
-    
-    # --- Conclusion Section ---
-    elements.append(Paragraph("Conclusion", custom_styles["Heading1"]))
-    conclusion_text = (
-        "In summary, the alert trends identified over the past year indicate several recurring patterns. "
-        "The core analytics provide actionable insights while the AI-generated forecasts offer a predictive outlook. "
-        "Both sections underscore the importance of proactive monitoring and continuous system improvement."
-    )
-    elements.append(Paragraph(conclusion_text, custom_styles["Normal"]))
-    elements.append(Spacer(1, 12))
+    doc.afterFlowable = after_flowable
     
     # Build the PDF document
     doc.build(elements)
     buffer.seek(0)
     return buffer.read()
-
-# End of generatepdf.py
