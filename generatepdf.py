@@ -101,7 +101,7 @@ def create_multi_line_chart(x_values, y_series, title, x_label, y_label):
         plot_bgcolor="white",
         font=dict(color="black"),
     )
-    img_bytes = pio.to_image(fig, format="png", scale=2)
+    img_bytes = pio.to_image(fig, format="png", scale=1)
     return io.BytesIO(img_bytes)
 
 def create_line_chart(data_points):
@@ -140,14 +140,14 @@ class SectionCover(Flowable):
         width, height = canvas._pagesize
         # White background
         canvas.setFillColor(colors.white)
-        canvas.rect(0, 0, width, height, fill=1)
+        canvas.rect(-77, 0, width, height, fill=1)
         # Red header rectangle at the top
         canvas.setFillColor(colors.HexColor("#a6192e"))
-        canvas.rect(0, height - 50, width, 50, fill=1)
+        canvas.rect(-77, height - 50, width, 50, fill=1)
         # Draw the section title centered with a slight upward offset
         canvas.setFillColor(colors.HexColor("#a6192e"))
         canvas.setFont("Roboto-Bold", 36)
-        canvas.drawCentredString(width/2, height/2 + 50, self.title)
+        canvas.drawCentredString(width/2 - 77, height/2 + 50, self.title)
 
 # === Data Formatting Functions ===
 def formatAthenaData(report_data):
@@ -232,7 +232,7 @@ def draw_cover(canvas, doc, report_data):
     canvas.setFillColor(colors.HexColor("#a6192e"))
     canvas.rect(0, height - 50, width, 50, fill=1)
     logo_path = "./assets/blackline-horizon.png"
-    canvas.drawImage(logo_path, width/2 - 150, height - 250, width=300, height=80, mask='auto')
+    canvas.drawImage(logo_path, width/2 - (375/2), height - 300, width=375, height=80, mask='auto')
     # Removed "Blackline Horizon" text since the logo suffices
     canvas.setFont("Roboto-Light", 18)
     canvas.setFillColor(colors.black)
@@ -292,19 +292,19 @@ def generate_pdf(report_data):
     
     doc.addPageTemplates([cover_template, body_template])
     
-    # --- TOC Setup ---
-    toc = TableOfContents()
-    toc.levelStyles = [custom_styles["TOC"]]
+    # # --- TOC Setup ---
+    # toc = TableOfContents()
+    # toc.levelStyles = [custom_styles["TOC"]]
     
     elements = []
     # Start with cover page then switch to Body template:
     elements.append(NextPageTemplate("Body"))
     elements.append(PageBreak())
     
-    # Table of Contents
-    elements.append(Paragraph("Table of Contents", custom_styles["Heading1"]))
-    elements.append(toc)
-    elements.append(PageBreak())
+    # # Table of Contents
+    # elements.append(Paragraph("Table of Contents", custom_styles["Heading1"]))
+    # elements.append(toc)
+    # elements.append(PageBreak())
     
     # --- Add Section Cover for Analytics (centered) ---
     elements.append(SectionCover("Analytics Section"))
@@ -431,20 +431,9 @@ def generate_pdf(report_data):
     elements.append(Spacer(1, 12))
     elements.append(PageBreak())
     
-    # --- Conclusion Section ---
-    elements.append(Paragraph("Conclusion", custom_styles["Heading1"]))
-    elements.append(Spacer(1, 12))
-    elements.append(Paragraph(
-        "In summary, the analysis above reveals key trends in alert data across multiple dimensions. "
-        "The detailed breakdown—from overall trends to device, sensor, industry, and event insights—provides a comprehensive view of system performance, enabling proactive adjustments and strategic planning.",
-        custom_styles["Normal"]
-    ))
-    elements.append(Spacer(1, 12))
-    
     # --- AI Insights or Predictive Analytics Section ---
     if not oracle_blank:
         # Existing AI Insights section:
-        elements.append(PageBreak())
         elements.append(SectionCover("AI Insights"))
         elements.append(PageBreak())
         
@@ -464,9 +453,11 @@ def generate_pdf(report_data):
             custom_styles["Normal"]
         ))
         actual_last_4w = oracle_data['actual_last_4w']
-        monthly_alerts = [actual_last_4w, oracle_data['predicted_last_4w']]
-        monthly_alerts_labels = ['Actual Last 4 Weeks', 'Predicted Last 4 Weeks']
-        elements.append(ChartImage(create_bar_chart, 350, 250, monthly_alerts, monthly_alerts_labels,
+        monthly_alerts = [actual_last_4w, oracle_data['predicted_next_4w']]
+        elements.append(ChartImage(create_multi_line_chart, 400, 250, dates, {"Alert Count": alert_counts},
+                                 "Alert Count Over Time", "Date", "Alerts"))
+        monthly_alerts_labels = ['Actual Last 4 Weeks', 'Predicted Next 4 Weeks']
+        elements.append(ChartImage(create_multi_line_chart, 350, 250, monthly_alerts_labels, {"Alerts":monthly_alerts},
                                      "Past Month Alert Comparison", "Category", "Alert Count"))
         elements.append(Spacer(1, 12))
         
@@ -488,7 +479,6 @@ def generate_pdf(report_data):
         elements.append(PageBreak())
     else:
         # Add this new section
-        elements.append(PageBreak())
         elements.append(Paragraph("Predictive Analytics", custom_styles["Heading1"]))
         elements.append(Paragraph(
             "There is not enough historical data to generate reliable predictions at this time. "
@@ -497,16 +487,26 @@ def generate_pdf(report_data):
         ))
         elements.append(Spacer(1, 12))
         elements.append(PageBreak())
+
+    # --- Conclusion Section ---
+    elements.append(Paragraph("Conclusion", custom_styles["Heading1"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(
+        "In summary, the analysis above reveals key trends in alert data across multiple dimensions. "
+        "The detailed breakdown—from overall trends to device, sensor, industry, and event insights—provides a comprehensive view of system performance, enabling proactive adjustments and strategic planning.",
+        custom_styles["Normal"]
+    ))
+    elements.append(Spacer(1, 12))
     
-    # --- Add TOC Callback ---
-    def after_flowable(flowable):
-        if hasattr(flowable, "style") and flowable.style.name in ["Heading1", "Heading2"]:
-            level = 0 if flowable.style.name == "Heading1" else 1
-            text = flowable.getPlainText()
-            # Notify the TOC about this entry
-            doc.notify('TOCEntry', (level, text, doc.page))
+    # # --- Add TOC Callback ---
+    # def after_flowable(flowable):
+    #     if hasattr(flowable, "style") and flowable.style.name in ["Heading1", "Heading2"]:
+    #         level = 0 if flowable.style.name == "Heading1" else 1
+    #         text = flowable.getPlainText()
+    #         # Notify the TOC about this entry
+    #         doc.notify('TOCEntry', (level, text, doc.page))
     
-    doc.afterFlowable = after_flowable
+    # doc.afterFlowable = after_flowable
     
     # Build the PDF document
     doc.build(elements)

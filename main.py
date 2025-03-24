@@ -41,7 +41,7 @@ app.add_middleware(
 # Create synchronous engine
 engine = create_engine(
     DATABASE_URL,
-    echo=True,  # Set to False in production
+    echo=False,  # Set to False in production
 )
 
 # Create sessionmaker with autoflush enabled
