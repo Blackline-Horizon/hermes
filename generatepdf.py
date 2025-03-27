@@ -202,7 +202,7 @@ def getOracleData(report_data) -> dict:
         try:
             report_dict = formatOracleData(report_data)
             print("REQUEST:", report_dict)
-            response = client.post(f"{ORACLE_URL}/report_data", json=report_dict, timeout=60)
+            response = client.post(f"{ORACLE_URL}/report_data", json=report_dict, timeout=300)
             response.raise_for_status()
             print("RESPONSE:")
             response_dict = json.loads(response.text)
